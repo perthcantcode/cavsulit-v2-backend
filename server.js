@@ -43,11 +43,17 @@ const io = new Server(server, {
 });
 
 io.on('connection', (socket) => {
-  socket.on('join', (userId) => socket.join(userId));
+  socket.on('join', (userId) => {
+    if (userId) socket.join(String(userId));
+  });
   socket.on('send_message', (data) => {
-    io.to(data.receiverId).emit('receive_message', data);
+    if (data?.receiverId && data.senderId !== data.receiverId) {
+      io.to(String(data.receiverId)).emit('receive_message', data);
+    }
   });
 });
+
+app.set('io', io);
 
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 app.use(compression());
@@ -71,8 +77,9 @@ app.get('/api/ping',(_req, res) => res.json({ pong: true, ts: Date.now() }));
 
 // ─── START ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
+const syncOptions = process.env.DB_SYNC_ALTER === 'true' ? { alter: true } : {};
 
-sequelize.sync({ alter: true })
+sequelize.sync(syncOptions)
   .then(() => {
     server.listen(PORT, () => console.log(`✅ Server on http://localhost:${PORT}`));
     console.log('✅ Database synced');

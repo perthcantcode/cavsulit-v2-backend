@@ -16,6 +16,7 @@ const safe = (u) => ({
   bio:            u.bio,
   socialLinks:    u.socialLinks,
   showContact:    u.showContact,
+  showStudentId:  u.showStudentId,
   badgeLevel:     u.badgeLevel,
   isCvsuVerified: u.isCvsuVerified,
   isVerified:     u.isVerified,
@@ -68,14 +69,15 @@ router.get('/me', protect, async (req, res) => {
 router.put('/me', protect, async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id);
-    const { fullName, contactNumber, department, bio, socialLinks, showContact } = req.body;
+    const { fullName, contactNumber, department, bio, socialLinks, showContact, showStudentId } = req.body;
     await user.update({
       fullName:      fullName      ?? user.fullName,
       contactNumber: contactNumber ?? user.contactNumber,
       department:    department    ?? user.department,
       bio:           bio           ?? user.bio,
       socialLinks:   socialLinks   ?? user.socialLinks,
-      showContact:   showContact   ?? user.showContact,
+      showContact:   showContact !== undefined ? showContact : user.showContact,
+      showStudentId: showStudentId !== undefined ? showStudentId : user.showStudentId,
     });
     res.json(safe(user));
   } catch (err) {

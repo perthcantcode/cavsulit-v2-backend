@@ -14,6 +14,7 @@ const User = sequelize.define('User', {
   bio:           { type: DataTypes.TEXT, allowNull: true },
   socialLinks:   { type: DataTypes.JSON, defaultValue: {} },     // { facebook, instagram, messenger }
   showContact:   { type: DataTypes.BOOLEAN, defaultValue: true },
+  showStudentId: { type: DataTypes.BOOLEAN, defaultValue: false },
   badgeLevel:    { type: DataTypes.ENUM('none','cvsu','trusted','top_seller'), defaultValue: 'none' },
   isCvsuVerified:{ type: DataTypes.BOOLEAN, defaultValue: false },
   isVerified:    { type: DataTypes.BOOLEAN, defaultValue: false },
@@ -32,11 +33,18 @@ const Shop = sequelize.define('Shop', {
   lat:           { type: DataTypes.DECIMAL(10,7), allowNull: true },
   lng:           { type: DataTypes.DECIMAL(10,7), allowNull: true },
   photos:        { type: DataTypes.JSON, defaultValue: [] },
+  shopLogo:      { type: DataTypes.STRING, allowNull: true },
   availableDate: { type: DataTypes.DATEONLY, allowNull: true },
   isActive:      { type: DataTypes.BOOLEAN, defaultValue: true },
   isFeatured:    { type: DataTypes.BOOLEAN, defaultValue: false },
   views:         { type: DataTypes.INTEGER, defaultValue: 0 },
   clicks:        { type: DataTypes.INTEGER, defaultValue: 0 },
+  shopType:        { type: DataTypes.STRING(20), defaultValue: 'products' },
+  campusType:      { type: DataTypes.STRING(20), defaultValue: 'main' },
+  satelliteCampus: { type: DataTypes.STRING(120), allowNull: true },
+  gcashNumber:     { type: DataTypes.STRING(20), allowNull: true },
+  gcashQr:         { type: DataTypes.STRING, allowNull: true },
+  hideGcash:       { type: DataTypes.BOOLEAN, defaultValue: false },
 }, {
   tableName: 'shops',
   timestamps: true,
@@ -122,8 +130,7 @@ const ViewLog = sequelize.define('ViewLog', {
   tableName: 'view_logs',
   timestamps: true,
   indexes: [
-    { fields: ['shopId', 'userId'] },
-    { fields: ['shopId', 'viewerKey'] },
+    { fields: ['shopId', 'viewerKey'], unique: true },
   ],
 });
 

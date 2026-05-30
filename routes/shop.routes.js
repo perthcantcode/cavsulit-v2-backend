@@ -1,50 +1,47 @@
 const router  = require('express').Router();
 const { Op }  = require('sequelize');
-const { Shop, Product, User, Review, ViewLog, Analytics, Wishlist } = require('../models');
+const {
+  Shop, Product, User, Review, ViewLog, Analytics, Wishlist, PreOrder, Message,
+} = require('../models');
 const { protect, optionalAuth, requireCvsu } = require('../middleware/auth');
 const upload  = require('../middleware/upload');
+const { recordUniqueView } = require('../utils/analyticsHelpers');
 
-const VIEW_WINDOW = 24 * 60 * 60 * 1000;
-
-function todayDate() {
-  return new Date().toISOString().split('T')[0];
+function maskHalf(value) {
+  if (!value) return value;
+  const s = String(value).trim();
+  if (s.length <= 1) return '*';
+  const visible = Math.max(1, Math.ceil(s.length / 2));
+  return s.slice(0, visible) + '*'.repeat(s.length - visible);
 }
 
-async function recordUniqueView(req, shop) {
-  const shopId = shop.id;
-  const userId = req.user?.id || null;
-  const viewerKey = userId ? null : (req.ip || 'anon');
+function sanitizeShopForViewer(shopJson, viewerId) {
+  const out = { ...shopJson };
+  const isOwner = viewerId && out.userId === viewerId;
 
-  const where = userId
-    ? { shopId, userId }
-    : { shopId, viewerKey };
+  if (out.seller) {
+    out.seller = { ...out.seller };
+    const showContact = out.seller.showContact !== false;
 
-  const existing = await ViewLog.findOne({ where });
-  const now = new Date();
+    if (!showContact) {
+      delete out.seller.contactNumber;
+    } else if (!isOwner && out.seller.contactNumber) {
+      out.seller.contactNumber = maskHalf(out.seller.contactNumber);
+    }
 
-  let isUnique = false;
-  if (!existing) {
-    await ViewLog.create({
-      shopId,
-      userId,
-      viewerKey,
-      lastViewedAt: now,
-    });
-    isUnique = true;
-  } else if (now - new Date(existing.lastViewedAt) >= VIEW_WINDOW) {
-    await existing.update({ lastViewedAt: now });
-    isUnique = true;
+    if (out.seller.studentId) {
+      if (!isOwner) {
+        out.seller.studentId = maskHalf(out.seller.studentId);
+      }
+    } else {
+      delete out.seller.studentId;
+    }
+
+    delete out.seller.showContact;
+    delete out.seller.showStudentId;
   }
 
-  if (isUnique) {
-    await shop.increment('views');
-    await Analytics.create({
-      shopId,
-      userId,
-      type: 'view',
-      date: todayDate(),
-    });
-  }
+  return out;
 }
 
 // ─── LIST CACHE (30s TTL) ─────────────────────────────────────────────────────
@@ -57,6 +54,23 @@ function getListCacheKey(query) {
 
 function invalidateListCache() {
   listCache.clear();
+}
+
+async function destroyShopWithRelations(shop) {
+  const shopId = shop.id;
+  await Analytics.destroy({ where: { shopId } });
+  await ViewLog.destroy({ where: { shopId } });
+  await Product.destroy({ where: { shopId } });
+  await Review.destroy({ where: { shopId } });
+  await PreOrder.destroy({ where: { shopId } });
+  await Wishlist.destroy({ where: { shopId } });
+  await Message.destroy({ where: { shopId } });
+  await shop.destroy();
+}
+
+function parseExistingPhotos(body) {
+  if (body.existingPhotos === undefined) return null;
+  return Array.isArray(body.existingPhotos) ? body.existingPhotos : [body.existingPhotos];
 }
 
 // ─── SHARED INCLUDE ───────────────────────────────────────────────────────────
@@ -126,7 +140,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const shop = await Shop.findByPk(req.params.id, {
       include: [
-        { model: User,    as: 'seller',   attributes: ['id','fullName','badgeLevel','department','profilePhoto','contactNumber','showContact'] },
+        { model: User,    as: 'seller',   attributes: ['id','fullName','badgeLevel','department','profilePhoto','contactNumber','showContact','studentId','socialLinks'] },
         { model: Product, as: 'products' },
         { model: Review,  as: 'reviews',
           include: [{ model: User, as: 'reviewer', attributes: ['id','fullName','profilePhoto','department'] }] },
@@ -135,6 +149,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     if (!shop) return res.status(404).json({ message: 'Shop not found' });
 
     await recordUniqueView(req, shop);
+    await shop.reload();
 
     let isSaved = false;
     if (req.user) {
@@ -147,52 +162,126 @@ router.get('/:id', optionalAuth, async (req, res) => {
     const avg = shop.reviews?.length
       ? (shop.reviews.reduce((a, r) => a + r.stars, 0) / shop.reviews.length).toFixed(1)
       : null;
-    res.json({
-      ...shop.toJSON(),
-      avgRating: avg,
-      reviewCount: shop.reviews?.length || 0,
-      isSaved,
-    });
+    const payload = sanitizeShopForViewer(
+      {
+        ...shop.toJSON(),
+        avgRating: avg,
+        reviewCount: shop.reviews?.length || 0,
+        isSaved,
+      },
+      req.user?.id,
+    );
+    res.json(payload);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+const shopUpload = upload.fields([
+  { name: 'photos', maxCount: 5 },
+  { name: 'gcashQr', maxCount: 1 },
+  { name: 'shopLogo', maxCount: 1 },
+]);
+
+function shopPayloadFromBody(body, files, existingShop = null) {
+  const photos = files?.photos ? files.photos.map((f) => f.path) : null;
+  const gcashQrFile = files?.gcashQr?.[0]?.path;
+  const shopLogoFile = files?.shopLogo?.[0]?.path;
+  const removeShopLogo = body.removeShopLogo === 'true' || body.removeShopLogo === true;
+
+  return {
+    name:          body.name          ?? existingShop?.name,
+    description:   body.description   ?? existingShop?.description,
+    category:      body.category      ?? existingShop?.category ?? 'other',
+    college:       body.college       ?? existingShop?.college ?? 'Other',
+    locationDesc:  body.locationDesc  ?? existingShop?.locationDesc,
+    lat:           body.lat           ?? existingShop?.lat ?? null,
+    lng:           body.lng           ?? existingShop?.lng ?? null,
+    availableDate: body.availableDate || null,
+    shopType:      body.shopType      || existingShop?.shopType || 'products',
+    campusType:    body.campusType    || existingShop?.campusType || 'main',
+    satelliteCampus: body.campusType === 'satellite' ? (body.satelliteCampus || null) : null,
+    gcashNumber:   body.gcashNumber   ?? existingShop?.gcashNumber ?? null,
+    gcashQr:       gcashQrFile ?? existingShop?.gcashQr ?? null,
+    shopLogo:      removeShopLogo ? null : (shopLogoFile ?? existingShop?.shopLogo ?? null),
+    photos,
+  };
+}
+
 // ─── POST /api/shops ─────────────────────────────────────────────────────────
-router.post('/', protect, requireCvsu, upload.array('photos', 5), async (req, res) => {
+router.post('/', protect, requireCvsu, shopUpload, async (req, res) => {
   try {
-    const { name, description, category, college, locationDesc, lat, lng, availableDate } = req.body;
-    const photos = req.files ? req.files.map((f) => f.path) : [];
-    const shop   = await Shop.create({
-      userId: req.user.id, name, description,
-      category:      category      || 'other',
-      college:       college       || 'Other',
-      locationDesc,
-      lat:           lat           || null,
-      lng:           lng           || null,
+    const base = shopPayloadFromBody(req.body, req.files);
+    const photos = base.photos || [];
+    delete base.photos;
+
+    const shop = await Shop.create({
+      userId: req.user.id,
+      ...base,
       photos,
-      availableDate: availableDate || null,
     });
+
+    const { productName, productPrice } = req.body;
+    if (productName && productPrice) {
+      await Product.create({
+        shopId: shop.id,
+        name: productName,
+        price: parseFloat(productPrice),
+      });
+    }
+
     invalidateListCache();
-    res.status(201).json(shop);
+    const full = await Shop.findByPk(shop.id, {
+      include: [{ model: Product, as: 'products' }],
+    });
+    res.status(201).json(full);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
 // ─── PUT /api/shops/:id ───────────────────────────────────────────────────────
-router.put('/:id', protect, upload.array('photos', 5), async (req, res) => {
+router.put('/:id', protect, shopUpload, async (req, res) => {
   try {
     const shop = await Shop.findByPk(req.params.id);
-    if (!shop)                           return res.status(404).json({ message: 'Shop not found' });
-    if (shop.userId !== req.user.id)     return res.status(403).json({ message: 'Forbidden' });
+    if (!shop)                       return res.status(404).json({ message: 'Shop not found' });
+    if (shop.userId !== req.user.id) return res.status(403).json({ message: 'Forbidden' });
 
-    const updates = { ...req.body };
-    if (req.files?.length) {
-      updates.photos = req.files.map((f) => f.path);
-    } else if (req.body.keepPhotos) {
-      delete updates.photos;
+    const base = shopPayloadFromBody(req.body, req.files, shop);
+    const data = { ...base };
+    delete data.photos;
+
+    const kept = parseExistingPhotos(req.body);
+    if (kept !== null || req.files?.photos?.length) {
+      let photoList = kept !== null ? kept : (shop.photos || []);
+      if (req.files?.photos?.length) {
+        photoList = [...photoList, ...req.files.photos.map((f) => f.path)];
+      }
+      data.photos = photoList.slice(0, 5);
     }
 
-    await shop.update(updates);
+    await shop.update(data);
+
+    const { productName, productPrice, productId } = req.body;
+    if (productName && productPrice) {
+      const price = parseFloat(productPrice);
+      if (productId) {
+        const prod = await Product.findByPk(productId);
+        if (prod && prod.shopId === shop.id) {
+          await prod.update({ name: productName, price });
+        }
+      } else {
+        const count = await Product.count({ where: { shopId: shop.id } });
+        if (count === 0) {
+          await Product.create({ shopId: shop.id, name: productName, price });
+        }
+      }
+    }
     invalidateListCache();
-    res.json(shop);
+
+    const updated = await Shop.findByPk(shop.id, {
+      include: [
+        { model: Product, as: 'products' },
+        { model: User, as: 'seller', attributes: ['id', 'fullName', 'badgeLevel', 'department', 'profilePhoto', 'contactNumber'] },
+      ],
+    });
+    res.json(updated);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
@@ -203,7 +292,7 @@ router.delete('/:id', protect, async (req, res) => {
     if (!shop)                       return res.status(404).json({ message: 'Shop not found' });
     if (shop.userId !== req.user.id && req.user.role !== 'admin')
       return res.status(403).json({ message: 'Forbidden' });
-    await shop.destroy();
+    await destroyShopWithRelations(shop);
     invalidateListCache();
     res.json({ message: 'Shop deleted' });
   } catch (err) { res.status(500).json({ message: err.message }); }

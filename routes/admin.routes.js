@@ -1,6 +1,20 @@
 const router = require('express').Router();
-const { User, Shop, Product, Analytics } = require('../models');
+const {
+  User, Shop, Product, Analytics, ViewLog, Review, PreOrder, Wishlist, Message,
+} = require('../models');
 const { protect, requireAdmin } = require('../middleware/auth');
+
+async function destroyShopWithRelations(shop) {
+  const shopId = shop.id;
+  await Analytics.destroy({ where: { shopId } });
+  await ViewLog.destroy({ where: { shopId } });
+  await Product.destroy({ where: { shopId } });
+  await Review.destroy({ where: { shopId } });
+  await PreOrder.destroy({ where: { shopId } });
+  await Wishlist.destroy({ where: { shopId } });
+  await Message.destroy({ where: { shopId } });
+  await shop.destroy();
+}
 
 // All admin routes require auth + admin role
 router.use(protect, requireAdmin);
@@ -55,7 +69,7 @@ router.delete('/shops/:id', async (req, res) => {
   try {
     const shop = await Shop.findByPk(req.params.id);
     if (!shop) return res.status(404).json({ message: 'Not found' });
-    await shop.destroy();
+    await destroyShopWithRelations(shop);
     res.json({ message: 'Shop deleted by admin' });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });

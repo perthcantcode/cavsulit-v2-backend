@@ -9,6 +9,12 @@ router.post('/', protect, async (req, res) => {
     const shop = await Shop.findByPk(shopId);
     if (!shop || shop.userId !== req.user.id)
       return res.status(403).json({ message: 'Forbidden' });
+    const existing = await Product.count({ where: { shopId } });
+    if (existing >= 1) {
+      return res.status(400).json({
+        message: 'Each listing allows one product. Post a new shop to sell another item.',
+      });
+    }
     const product = await Product.create({ shopId, name, price, image });
     res.status(201).json(product);
   } catch (err) { res.status(500).json({ message: err.message }); }
