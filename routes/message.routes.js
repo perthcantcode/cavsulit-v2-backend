@@ -3,6 +3,12 @@ const { Message, User } = require('../models');
 const { protect } = require('../middleware/auth');
 const { Op } = require('sequelize');
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const sanitize = (raw) => {
+  const id = String(raw || '').trim();
+  return UUID_RE.test(id) ? id : null;
+};
+
 // GET /api/messages/conversations
 router.get('/conversations', protect, async (req, res) => {
   try {
@@ -32,18 +38,21 @@ router.get('/conversations', protect, async (req, res) => {
 // GET /api/messages/:partnerId
 router.get('/:partnerId', protect, async (req, res) => {
   try {
+    const partnerId = sanitize(req.params.partnerId);
+    if (!partnerId) return res.status(400).json({ message: 'Invalid partner ID' });
+
     const msgs = await Message.findAll({
       where: {
         [Op.or]: [
-          { senderId: req.user.id,          receiverId: req.params.partnerId },
-          { senderId: req.params.partnerId, receiverId: req.user.id },
+          { senderId: req.user.id, receiverId: partnerId },
+          { senderId: partnerId, receiverId: req.user.id },
         ],
       },
       order: [['createdAt','ASC']],
     });
     await Message.update(
       { isRead: true },
-      { where: { senderId: req.params.partnerId, receiverId: req.user.id, isRead: false } }
+      { where: { senderId: partnerId, receiverId: req.user.id, isRead: false } }
     );
     res.json(msgs);
   } catch (err) { res.status(500).json({ message: err.message }); }
