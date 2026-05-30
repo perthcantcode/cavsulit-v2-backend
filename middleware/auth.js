@@ -45,7 +45,12 @@ const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-    res.status(401).json({ message: 'Invalid or expired token' });
+    let message = 'Invalid or expired token. Sign out and sign in again.';
+    if (err.message?.includes('PEM') || err.message?.includes('DECODER')) {
+      message =
+        'Server could not verify login. Check FIREBASE_PRIVATE_KEY on Render (full key with \\n line breaks).';
+    }
+    res.status(401).json({ message });
   }
 };
 

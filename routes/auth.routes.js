@@ -1,8 +1,20 @@
 const router   = require('express').Router();
 const bcrypt   = require('bcryptjs');
+const admin    = require('../config/firebase.config');
 const { User } = require('../models');
 const { protect } = require('../middleware/auth');
 const upload   = require('../middleware/upload');
+
+async function firebaseUidFromRequest(req, email) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token || !email) return null;
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    return decoded.email === email ? decoded.uid : null;
+  } catch {
+    return null;
+  }
+}
 
 // Safe user object (never expose password hash)
 const safe = (u) => ({
@@ -28,14 +40,16 @@ const safe = (u) => ({
 router.post('/register', async (req, res) => {
   try {
     const { fullName, email, password, studentId, department, contactNumber } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+
+    const firebaseUid = await firebaseUidFromRequest(req, email);
 
     const exists = await User.findOne({ where: { email } });
     if (exists) {
-      // User already auto-created by protect middleware on a prior request → just return it
       return res.status(200).json({ user: safe(exists) });
     }
 
-    const user = await User.create({
+    const payload = {
       fullName,
       email,
       password:       password ? await bcrypt.hash(password, 10) : null,
@@ -46,7 +60,10 @@ router.post('/register', async (req, res) => {
       isCvsuVerified: false,
       isVerified:     false,
       role:           'seller',
-    });
+    };
+    if (firebaseUid) payload.id = firebaseUid;
+
+    const user = await User.create(payload);
 
     res.status(201).json({ user: safe(user) });
   } catch (err) {
