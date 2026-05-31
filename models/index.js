@@ -23,8 +23,8 @@ const User = sequelize.define('User', {
 
 // ─── SHOP ─────────────────────────────────────────────────────────────────────
 const Shop = sequelize.define('Shop', {
-  id:            { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId:        { type: DataTypes.UUID, allowNull: false },
+  id: { type: DataTypes.STRING, primaryKey: true },
+  userId: { type: DataTypes.STRING, allowNull: false },
   name:          { type: DataTypes.STRING(100), allowNull: false },
   description:   { type: DataTypes.TEXT, allowNull: true },
   category:      { type: DataTypes.ENUM('food','drinks','merch','accessories','school_supplies','beauty','services','other'), defaultValue: 'other' },
@@ -57,8 +57,8 @@ const Shop = sequelize.define('Shop', {
 
 // ─── PRODUCT ──────────────────────────────────────────────────────────────────
 const Product = sequelize.define('Product', {
-  id:          { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  shopId:      { type: DataTypes.UUID, allowNull: false },
+  id:          { type: DataTypes.STRING, primaryKey: true },
+  shopId:      { type: DataTypes.STRING, allowNull: false },
   name:        { type: DataTypes.STRING(100), allowNull: false },
   price:       { type: DataTypes.DECIMAL(10,2), allowNull: false },
   image:       { type: DataTypes.STRING, allowNull: true },
@@ -67,28 +67,28 @@ const Product = sequelize.define('Product', {
 
 // ─── MESSAGE ──────────────────────────────────────────────────────────────────
 const Message = sequelize.define('Message', {
-  id:         { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  senderId:   { type: DataTypes.UUID, allowNull: false },
-  receiverId: { type: DataTypes.UUID, allowNull: false },
-  shopId:     { type: DataTypes.UUID, allowNull: true },
+  id:         { type: DataTypes.STRING, primaryKey: true },
+  senderId:   { type: DataTypes.STRING, allowNull: false },
+  receiverId: { type: DataTypes.STRING, allowNull: false },
+  shopId:     { type: DataTypes.STRING, allowNull: true },
   text:       { type: DataTypes.TEXT, allowNull: false },
   isRead:     { type: DataTypes.BOOLEAN, defaultValue: false },
 }, { tableName: 'messages', timestamps: true });
 
 // ─── REVIEW ───────────────────────────────────────────────────────────────────
 const Review = sequelize.define('Review', {
-  id:      { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  shopId:  { type: DataTypes.UUID, allowNull: false },
-  userId:  { type: DataTypes.UUID, allowNull: false },
+  id:      { type: DataTypes.STRING, primaryKey: true },
+  shopId: { type: DataTypes.STRING, allowNull: false },
+  userId: { type: DataTypes.STRING, allowNull: false },
   stars:   { type: DataTypes.INTEGER, allowNull: false, validate: { min: 1, max: 5 } },
   comment: { type: DataTypes.TEXT, allowNull: true },
 }, { tableName: 'reviews', timestamps: true });
 
 // ─── PREORDER ─────────────────────────────────────────────────────────────────
 const PreOrder = sequelize.define('PreOrder', {
-  id:           { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  shopId:       { type: DataTypes.UUID, allowNull: false },
-  buyerId:      { type: DataTypes.UUID, allowNull: false },
+  id:           { type: DataTypes.STRING, primaryKey: true },
+  shopId:  { type: DataTypes.STRING, allowNull: false },
+  buyerId: { type: DataTypes.STRING, allowNull: false },
   items:        { type: DataTypes.JSON, defaultValue: [] },
   pickupTime:   { type: DataTypes.STRING, allowNull: true },
   locationNote: { type: DataTypes.STRING(200), allowNull: true },
@@ -97,16 +97,16 @@ const PreOrder = sequelize.define('PreOrder', {
 
 // ─── WISHLIST ─────────────────────────────────────────────────────────────────
 const Wishlist = sequelize.define('Wishlist', {
-  id:     { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
-  shopId: { type: DataTypes.UUID, allowNull: false },
+  id:     { type: DataTypes.STRING, primaryKey: true },
+  userId: { type: DataTypes.STRING, allowNull: false },
+  shopId: { type: DataTypes.STRING, allowNull: false },
 }, { tableName: 'wishlists', timestamps: true });
 
 // ─── ANALYTICS ────────────────────────────────────────────────────────────────
 const Analytics = sequelize.define('Analytics', {
-  id:     { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  shopId: { type: DataTypes.UUID, allowNull: false },
-  userId: { type: DataTypes.UUID, allowNull: true },  // null for guests
+  id:     { type: DataTypes.STRING, primaryKey: true },
+  shopId: { type: DataTypes.STRING, allowNull: false },
+  userId: { type: DataTypes.STRING, allowNull: true },  // null for guests
   type:   { type: DataTypes.ENUM('view','click','message'), allowNull: false },
   date:   { type: DataTypes.DATEONLY, defaultValue: DataTypes.NOW },
 }, {
@@ -121,9 +121,9 @@ const Analytics = sequelize.define('Analytics', {
 
 // ─── VIEW LOG (unique views per user per shop per 24h) ───────────────────────
 const ViewLog = sequelize.define('ViewLog', {
-  id:            { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId:        { type: DataTypes.UUID, allowNull: true },
-  shopId:        { type: DataTypes.UUID, allowNull: false },
+  id:            { type: DataTypes.STRING, primaryKey: true },
+  userId:        { type: DataTypes.STRING, allowNull: true },
+  shopId: { type: DataTypes.STRING, allowNull: false },
   lastViewedAt:  { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   viewerKey:     { type: DataTypes.STRING(120), allowNull: true }, // ip or anon for guests
 }, {
