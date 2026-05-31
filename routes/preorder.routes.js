@@ -1,13 +1,14 @@
 const router = require('express').Router();
 const { PreOrder, Shop, User, Message } = require('../models');
 const { protect } = require('../middleware/auth');
+const { formatPickupDateTime } = require('../utils/formatHelpers');
 
 function buildPreorderMessage({ items, pickupTime, locationNote }) {
   const itemText = Array.isArray(items)
     ? items.map((i) => (typeof i === 'string' ? i : i?.name)).filter(Boolean).join(', ')
     : String(items || '').trim();
-  const pickup = pickupTime || 'TBD';
-  const location = locationNote || 'TBD';
+  const pickup = formatPickupDateTime(pickupTime);
+  const location = locationNote?.trim() || 'TBD';
   return `📋 PRE-ORDER REQUEST\nItems: ${itemText}\nPickup: ${pickup}\nLocation: ${location}`;
 }
 
