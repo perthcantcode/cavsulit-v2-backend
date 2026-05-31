@@ -49,7 +49,14 @@ router.post('/register', async (req, res) => {
       return res.status(200).json({ user: safe(exists) });
     }
 
-    const payload = {
+    if (!firebaseUid) {
+      return res.status(401).json({
+        message: 'Sign in with Firebase first, then complete registration.',
+      });
+    }
+
+    const user = await User.create({
+      id:             firebaseUid,
       fullName,
       email,
       password:       password ? await bcrypt.hash(password, 10) : null,
@@ -60,10 +67,7 @@ router.post('/register', async (req, res) => {
       isCvsuVerified: false,
       isVerified:     false,
       role:           'seller',
-    };
-    if (firebaseUid) payload.id = firebaseUid;
-
-    const user = await User.create(payload);
+    });
 
     res.status(201).json({ user: safe(user) });
   } catch (err) {

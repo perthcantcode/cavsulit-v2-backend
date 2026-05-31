@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const admin = require('../config/firebase.config');
 const { User } = require('../models');
 
@@ -15,8 +16,10 @@ const protect = async (req, res, next) => {
     const isVerified   = decoded.email_verified;
     const isCvsu       = isCvsuEmail && isVerified;
 
-    // Upsert: create user row on first login if it doesn't exist yet
-    let user = await User.findOne({ where: { email } });
+    // Match by Firebase UID first, then email (legacy rows before id → text migration)
+    let user = await User.findOne({
+      where: { [Op.or]: [{ id: decoded.uid }, { email }] },
+    });
     if (!user) {
       user = await User.create({
         id:             decoded.uid,
@@ -27,6 +30,7 @@ const protect = async (req, res, next) => {
         isCvsuVerified: false,
       });
     }
+    // If found by email with a legacy id, keep that id so shops/messages FKs stay valid.
 
     // Promote badge when Firebase confirms CvSU email is verified
     if (isCvsu && !user.isCvsuVerified) {
@@ -62,7 +66,9 @@ const optionalAuth = async (req, res, next) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return next();
     const decoded = await admin.auth().verifyIdToken(token);
-    const user    = await User.findOne({ where: { email: decoded.email } });
+    const user = await User.findOne({
+      where: { [Op.or]: [{ id: decoded.uid }, { email: decoded.email }] },
+    });
     req.user = user;
     next();
   } catch {

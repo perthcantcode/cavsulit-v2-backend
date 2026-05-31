@@ -1,5 +1,13 @@
+const { randomUUID } = require('crypto');
 const { sequelize } = require('../config/db.config');
 const { DataTypes } = require('sequelize');
+
+// User.id = Firebase UID (set in auth middleware). All other tables auto-generate UUID strings.
+const autoId = {
+  type: DataTypes.STRING,
+  primaryKey: true,
+  defaultValue: () => randomUUID(),
+};
 
 // ─── USER ─────────────────────────────────────────────────────────────────────
 const User = sequelize.define('User', {
@@ -23,7 +31,7 @@ const User = sequelize.define('User', {
 
 // ─── SHOP ─────────────────────────────────────────────────────────────────────
 const Shop = sequelize.define('Shop', {
-  id: { type: DataTypes.STRING, primaryKey: true },
+  id: autoId,
   userId: { type: DataTypes.STRING, allowNull: false },
   name:          { type: DataTypes.STRING(100), allowNull: false },
   description:   { type: DataTypes.TEXT, allowNull: true },
@@ -57,7 +65,7 @@ const Shop = sequelize.define('Shop', {
 
 // ─── PRODUCT ──────────────────────────────────────────────────────────────────
 const Product = sequelize.define('Product', {
-  id:          { type: DataTypes.STRING, primaryKey: true },
+  id:          autoId,
   shopId:      { type: DataTypes.STRING, allowNull: false },
   name:        { type: DataTypes.STRING(100), allowNull: false },
   price:       { type: DataTypes.DECIMAL(10,2), allowNull: false },
@@ -67,7 +75,7 @@ const Product = sequelize.define('Product', {
 
 // ─── MESSAGE ──────────────────────────────────────────────────────────────────
 const Message = sequelize.define('Message', {
-  id:         { type: DataTypes.STRING, primaryKey: true },
+  id:         autoId,
   senderId:   { type: DataTypes.STRING, allowNull: false },
   receiverId: { type: DataTypes.STRING, allowNull: false },
   shopId:     { type: DataTypes.STRING, allowNull: true },
@@ -77,7 +85,7 @@ const Message = sequelize.define('Message', {
 
 // ─── REVIEW ───────────────────────────────────────────────────────────────────
 const Review = sequelize.define('Review', {
-  id:      { type: DataTypes.STRING, primaryKey: true },
+  id:      autoId,
   shopId: { type: DataTypes.STRING, allowNull: false },
   userId: { type: DataTypes.STRING, allowNull: false },
   stars:   { type: DataTypes.INTEGER, allowNull: false, validate: { min: 1, max: 5 } },
@@ -86,7 +94,7 @@ const Review = sequelize.define('Review', {
 
 // ─── PREORDER ─────────────────────────────────────────────────────────────────
 const PreOrder = sequelize.define('PreOrder', {
-  id:           { type: DataTypes.STRING, primaryKey: true },
+  id:           autoId,
   shopId:  { type: DataTypes.STRING, allowNull: false },
   buyerId: { type: DataTypes.STRING, allowNull: false },
   items:        { type: DataTypes.JSON, defaultValue: [] },
@@ -97,14 +105,14 @@ const PreOrder = sequelize.define('PreOrder', {
 
 // ─── WISHLIST ─────────────────────────────────────────────────────────────────
 const Wishlist = sequelize.define('Wishlist', {
-  id:     { type: DataTypes.STRING, primaryKey: true },
+  id:     autoId,
   userId: { type: DataTypes.STRING, allowNull: false },
   shopId: { type: DataTypes.STRING, allowNull: false },
 }, { tableName: 'wishlists', timestamps: true });
 
 // ─── ANALYTICS ────────────────────────────────────────────────────────────────
 const Analytics = sequelize.define('Analytics', {
-  id:     { type: DataTypes.STRING, primaryKey: true },
+  id:     autoId,
   shopId: { type: DataTypes.STRING, allowNull: false },
   userId: { type: DataTypes.STRING, allowNull: true },  // null for guests
   type:   { type: DataTypes.ENUM('view','click','message'), allowNull: false },
@@ -121,7 +129,7 @@ const Analytics = sequelize.define('Analytics', {
 
 // ─── VIEW LOG (unique views per user per shop per 24h) ───────────────────────
 const ViewLog = sequelize.define('ViewLog', {
-  id:            { type: DataTypes.STRING, primaryKey: true },
+  id:            autoId,
   userId:        { type: DataTypes.STRING, allowNull: true },
   shopId: { type: DataTypes.STRING, allowNull: false },
   lastViewedAt:  { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
@@ -132,6 +140,13 @@ const ViewLog = sequelize.define('ViewLog', {
   indexes: [
     { fields: ['shopId', 'viewerKey'], unique: true },
   ],
+});
+
+// Ensure IDs exist even if DB column has no default (after UUID → STRING migration)
+[Shop, Product, Message, Review, PreOrder, Wishlist, Analytics, ViewLog].forEach((Model) => {
+  Model.beforeCreate((row) => {
+    if (!row.id) row.id = randomUUID();
+  });
 });
 
 // ─── ASSOCIATIONS ─────────────────────────────────────────────────────────────
