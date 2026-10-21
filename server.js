@@ -4,9 +4,12 @@ const compression = require('compression');
 const cors        = require('cors');
 const http     = require('http');
 const { Server } = require('socket.io');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { sequelize } = require('./models');
 
 const app    = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
@@ -28,7 +31,21 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
+app.use('/api', rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
+app.use('/api/auth', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many attempts, try again in a few minutes.' },
+}));
 // ─── SOCKET.IO (real-time messaging) ─────────────────────────────────────────
 const io = new Server(server, {
   cors: {
