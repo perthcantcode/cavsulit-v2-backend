@@ -2,16 +2,13 @@ services:
   - type: web
     name: cavsulit-v2-api
     runtime: node
-    rootDir: .
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/ping
     envVars:
       - key: NODE_VERSION
-        value: 20
-      - key: PORT
-        value: 5000
+        value: "20"
       - key: DB_SSL
-        value: true
+        value: "true"
       - key: DB_SYNC_ALTER
-        value: true
+        value: "true"
