@@ -16,6 +16,7 @@ const server = http.createServer(app);
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'https://cavsulit.vercel.app',
   'https://cavsulit-v2-frontend.vercel.app',
   process.env.CLIENT_URL,
 ].filter(Boolean);
