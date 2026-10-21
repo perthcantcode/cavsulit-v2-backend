@@ -16,12 +16,13 @@ const server = http.createServer(app);
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'https://cavsulit-v2-frontend.vercel.app',
   process.env.CLIENT_URL,
 ].filter(Boolean);
 
 const corsOptions = {
-  origin(origin, cb) {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+  origin: function (origin, cb) {
+    if (!origin || allowedOrigins.includes(origin)) {
       cb(null, true);
     } else {
       cb(new Error('Not allowed by CORS'));
@@ -50,13 +51,14 @@ app.use('/api/auth', rateLimit({
 const io = new Server(server, {
   cors: {
     origin(origin, cb) {
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      if (!origin || allowedOrigins.includes(origin)) {
         cb(null, true);
       } else {
         cb(new Error('Not allowed by CORS'));
       }
     },
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 
