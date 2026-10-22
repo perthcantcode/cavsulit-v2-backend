@@ -6,8 +6,9 @@ const http     = require('http');
 const { Server } = require('socket.io');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { sequelize } = require('./models');
-
+const { Op } = require('sequelize');
+const admin = require('./config/firebase.config');
+const { sequelize, User } = require('./models');
 const app    = express();
 app.set('trust proxy', 1);
 const server = http.createServer(app);
@@ -63,14 +64,37 @@ const io = new Server(server, {
   },
 });
 
+// Verify the Firebase token before a socket is allowed to connect
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error('No token provided'));
+    const decoded = await admin.auth().verifyIdToken(token);
+    const user = await User.findOne({
+      where: { [Op.or]: [{ id: decoded.uid }, { email: decoded.email }] },
+    });
+    if (!user) return next(new Error('User not found'));
+    socket.userId = user.id;
+    next();
+  } catch {
+    next(new Error('Invalid or expired token'));
+  }
+});
+
 io.on('connection', (socket) => {
-  socket.on('join', (userId) => {
-    if (userId) socket.join(String(userId));
-  });
+  // Each socket joins ONLY its own room, decided by the server
+  socket.join(String(socket.userId));
+
+  // Kept so the current frontend doesn't break; the client-sent ID is ignored
+  socket.on('join', () => {});
+
   socket.on('send_message', (data) => {
-    if (data?.receiverId && data.senderId !== data.receiverId) {
-      io.to(String(data.receiverId)).emit('receive_message', data);
-    }
+    const receiverId = data?.receiverId;
+    if (receiverId == null || String(receiverId) === String(socket.userId)) return;
+    io.to(String(receiverId)).emit('receive_message', {
+      ...data,
+      senderId: socket.userId, // server decides who sent it
+    });
   });
 });
 
